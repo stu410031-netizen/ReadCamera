@@ -1,166 +1,194 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
+
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>QR Code 掃描測試</title>
 
-<style>
-body{
-  font-family: Arial, sans-serif;
-  text-align:center;
-  background:#f5f5f5;
-  margin:0;
-  padding:20px;
-}
+    <meta charset="UTF-8">
 
-h2{
-  margin-bottom:20px;
-}
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0">
 
-video{
-  width:90%;
-  max-width:500px;
-  border-radius:10px;
-  background:#000;
-}
+    <title>QR Code 掃描系統</title>
 
-button{
-  padding:10px 20px;
-  margin:10px;
-  font-size:16px;
-  cursor:pointer;
-}
+    <!-- QR Code 掃描程式庫 -->
+    <script src="https://unpkg.com/html5-qrcode"></script>
 
-#resultBox{
-  margin:20px auto;
-  width:90%;
-  max-width:500px;
-  background:#fff;
-  border-radius:10px;
-  padding:15px;
-  box-shadow:0 2px 8px rgba(0,0,0,0.1);
-  text-align:left;
-  word-break:break-all;
-}
+    <style>
 
-#result{
-  color:#d63384;
-  font-weight:bold;
-  font-size:18px;
-}
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            background: #f5f5f5;
+            margin: 0;
+            padding: 20px;
+        }
 
-#status{
-  color:#666;
-  margin-top:10px;
-}
+        h1 {
+            margin-bottom: 20px;
+        }
 
-canvas{
-  display:none;
-}
-</style>
+        #reader {
+            width: 350px;
+            max-width: 95%;
+            margin: auto;
+            background: white;
+            padding: 10px;
+            border-radius: 10px;
+        }
 
-<!-- jsQR 函式庫 -->
-<script src="https://cdn.jsdelivr.net/npm/jsqr/dist/jsQR.js"></script>
+        #result {
+            margin: 20px auto;
+            padding: 15px;
+            width: 90%;
+            max-width: 500px;
+            background: white;
+            border-radius: 10px;
+            font-size: 20px;
+            word-break: break-all;
+        }
+
+        #status {
+            margin-top: 15px;
+            font-size: 18px;
+        }
+
+    </style>
+
 </head>
 
 <body>
 
-<h2>QR Code 掃描測試</h2>
+    <h1>QR Code 掃描系統</h1>
 
-<video id="video" autoplay playsinline></video>
-<canvas id="canvas"></canvas>
+    <div id="reader"></div>
 
-<br>
+    <div id="result">
+        尚未掃描 QR Code
+    </div>
 
-<button onclick="startCamera()">開啟攝影機</button>
-<button onclick="stopCamera()">關閉攝影機</button>
+    <div id="status">
+        等待掃描...
+    </div>
 
-<div id="resultBox">
-  <div><strong>掃描結果：</strong></div>
-  <div id="result">尚未讀到 QR Code</div>
-  <div id="status">請先開啟攝影機</div>
-</div>
 
-<script>
-let stream = null;
-let scanInterval = null;
-let lastResult = "";
+    <script>
 
-const video = document.getElementById("video");
-const canvas = document.getElementById("canvas");
-const ctx = canvas.getContext("2d");
-const result = document.getElementById("result");
-const statusText = document.getElementById("status");
+        // ====================================
+        // Google Apps Script Web App 網址
+        // ====================================
 
-async function startCamera(){
-  try{
-    stopCamera();
+        const GAS_URL =
+            "https://script.google.com/a/macros/kssh.khc.edu.tw/s/AKfycbxt0iXozNwwdWroSCo0j8zAspFecOo0pOF_74ZDUgPKU8GX1yBMrX9UP-r1Ul3PWvzJsQ/exec";
 
-    stream = await navigator.mediaDevices.getUserMedia({
-      video: {
-        facingMode: "environment"
-      },
-      audio: false
-    });
 
-    video.srcObject = stream;
-    statusText.textContent = "攝影機已開啟，請將 QR Code 對準鏡頭";
+        // 防止同一個 QR Code 連續寫入
+        let lastCode = "";
 
-    video.onloadedmetadata = () => {
-      video.play();
-      startScan();
-    };
 
-  }catch(err){
-    console.error(err);
-    alert("無法開啟攝影機");
-    statusText.textContent = "無法開啟攝影機";
-  }
-}
+        // ====================================
+        // 掃描成功
+        // ====================================
 
-function startScan(){
-  scanInterval = setInterval(() => {
-    if(video.readyState === video.HAVE_ENOUGH_DATA){
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
+        function onScanSuccess(decodedText, decodedResult) {
 
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            // 如果跟上一筆完全一樣，就不重複寫入
+            if (decodedText === lastCode) {
+                return;
+            }
 
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const code = jsQR(imageData.data, imageData.width, imageData.height);
+            lastCode = decodedText;
 
-      if(code){
-        if(code.data !== lastResult){
-          lastResult = code.data;
-          result.textContent = code.data;
-          statusText.textContent = "已成功讀到 QR Code";
-          console.log("QR Code 內容：", code.data);
+
+            // 顯示 QR Code 內容
+            document.getElementById("result").innerText =
+                "QR Code內容：\n" + decodedText;
+
+
+            document.getElementById("status").innerText =
+                "正在寫入 Google 試算表...";
+
+
+            // 傳送到 Apps Script
+            const url =
+                GAS_URL +
+                "?qr=" +
+                encodeURIComponent(decodedText) +
+                "&t=" +
+                Date.now();
+
+
+            // 使用圖片載入方式送出 GET
+            const img = new Image();
+
+            img.onload = function () {
+
+                document.getElementById("status").innerText =
+                    "✅ 已送出，請確認試算表";
+
+            };
+
+
+            img.onerror = function () {
+
+                document.getElementById("status").innerText =
+                    "⚠️ 已嘗試寫入，請確認試算表";
+
+            };
+
+
+            img.src = url;
+
+
+            // 3 秒後允許再次掃描
+            setTimeout(function () {
+
+                lastCode = "";
+
+                document.getElementById("status").innerText =
+                    "可以掃描下一個 QR Code";
+
+            }, 3000);
+
         }
-      }
-    }
-  }, 300);
-}
 
-function stopCamera(){
-  if(scanInterval){
-    clearInterval(scanInterval);
-    scanInterval = null;
-  }
 
-  if(stream){
-    stream.getTracks().forEach(track => track.stop());
-    stream = null;
-  }
+        // ====================================
+        // 掃描錯誤
+        // ====================================
 
-  video.srcObject = null;
-  statusText.textContent = "攝影機已關閉";
-}
+        function onScanFailure(error) {
 
-window.addEventListener("beforeunload", () => {
-  stopCamera();
-});
-</script>
+            // 不需要一直顯示掃描錯誤
+            // 因為沒有掃到 QR Code 是正常情況
+
+        }
+
+
+        // ====================================
+        // 啟動攝影機
+        // ====================================
+
+        const html5QrCode =
+            new Html5QrcodeScanner(
+                "reader",
+                {
+                    fps: 10,
+                    qrbox: {
+                        width: 250,
+                        height: 250
+                    }
+                },
+                false
+            );
+
+
+        html5QrCode.render(
+            onScanSuccess,
+            onScanFailure
+        );
+
+    </script>
 
 </body>
+
 </html>
